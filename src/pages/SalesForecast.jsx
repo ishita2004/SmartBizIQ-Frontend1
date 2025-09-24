@@ -16,16 +16,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     if (!filtered.length) return null;
 
     return (
-      <div
-        style={{
-          background: "#14191eff",
-          border: "1px solid #090f15ff",
-          borderRadius: "8px",
-          padding: "10px",
-          color: "#ffffff",
-          boxShadow: "0px 2px 8px rgba(0,0,0,0.2)"
-        }}
-      >
+      <div style={{ background: "#14191eff", border: "1px solid #090f15ff", borderRadius: "8px", padding: "10px", color: "#ffffff" }}>
         <p style={{ margin: 0, fontWeight: "bold" }}>Year: {label}</p>
         {filtered.map((p, idx) => (
           <p key={idx} style={{ color: p.stroke, margin: "4px 0" }}>
@@ -50,7 +41,12 @@ const SalesForecast = () => {
   const [insights, setInsights] = useState(null);
   const [allResults, setAllResults] = useState([]);
 
-  const onDrop = useCallback((acceptedFiles) => {
+  // ✅ FIX: Use proper MIME type for CSV files
+  const onDrop = useCallback((acceptedFiles, fileRejections) => {
+    if (fileRejections.length > 0) {
+      setError("❌ Invalid file type or size. Please upload a CSV under 5MB.");
+      return;
+    }
     const selectedFile = acceptedFiles[0];
     setFile(selectedFile);
     setFileName(selectedFile?.name || "");
@@ -61,7 +57,12 @@ const SalesForecast = () => {
     setInsights(null);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: ".csv" });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { "text/csv": [".csv"] }, // ✅ Proper MIME type syntax
+    maxSize: 5 * 1024 * 1024, // ✅ 5MB limit
+    multiple: false
+  });
 
   const handleUpload = async () => {
     if (!file) {
@@ -74,10 +75,7 @@ const SalesForecast = () => {
 
     try {
       setLoading(true);
-
-      const res = await API.post(`/forecasting?model=${model}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      const res = await API.post(`/forecasting?model=${model}`, formData, { headers: { "Content-Type": "multipart/form-data" } });
 
       // Parse uploaded file for historical data
       const fileText = await file.text();
@@ -89,11 +87,7 @@ const SalesForecast = () => {
         const values = row.split(",");
         const year = values[headers.indexOf("year")] || values[headers.indexOf("ds")];
         const val = values[headers.indexOf("value")] || values[headers.indexOf("y")];
-        return {
-          ds: year.trim(),
-          yhat: parseFloat(val),
-          type: "Historical"
-        };
+        return { ds: year.trim(), yhat: parseFloat(val), type: "Historical" };
       });
 
       setHistorical(parsed);
@@ -120,12 +114,7 @@ const SalesForecast = () => {
       };
 
       setResult(fullResult);
-
-      setAllResults(prev => {
-        const others = prev.filter(r => r.model !== model);
-        return [...others, fullResult];
-      });
-
+      setAllResults(prev => [...prev.filter(r => r.model !== model), fullResult]);
       setSummary(res.data.summary);
       setInsights(res.data.bi_insights);
       setError("");
@@ -141,7 +130,6 @@ const SalesForecast = () => {
     if (!result?.forecast?.length) return;
     const csvContent = "Year,Forecasted Sales\n" +
       result.forecast.map(row => `${row.ds},${row.yhat.toFixed(2)}`).join("\n");
-
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -155,14 +143,12 @@ const SalesForecast = () => {
   const handleDownloadReport = async () => {
     const container = document.querySelector(".forecast-container");
     if (!container) return;
-
     try {
       const canvas = await html2canvas(container, { scale: 2 });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
       pdf.save(`${model}_forecast_report.pdf`);
     } catch (err) {
@@ -171,9 +157,7 @@ const SalesForecast = () => {
   };
 
   const forecastedOnly = result?.forecast || [];
-  const comparisonYears = Array.from(
-    new Set(allResults.flatMap(r => r.forecast).map(f => f.ds))
-  );
+  const comparisonYears = Array.from(new Set(allResults.flatMap(r => r.forecast).map(f => f.ds)));
 
   return (
     <Container className="forecast-container">
@@ -230,14 +214,7 @@ const SalesForecast = () => {
                 <YAxis />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="yhat"
-                  name={`${model.toUpperCase()} Forecast`}
-                  stroke="#007bff"
-                  dot={false}
-                  strokeWidth={2}
-                />
+                <Line type="monotone" dataKey="yhat" name={`${model.toUpperCase()} Forecast`} stroke="#007bff" dot={false} strokeWidth={2} />
                 <Brush dataKey="ds" height={30} stroke="#8884d8" />
               </LineChart>
             </ResponsiveContainer>
@@ -248,9 +225,7 @@ const SalesForecast = () => {
                   <h5>Forecasted Sales (Next Years)</h5>
                   <ul>
                     {forecastedOnly.map((item, i) => (
-                      <li key={i}>
-                        <strong>{item.ds}:</strong> ${item.yhat.toFixed(2)}
-                      </li>
+                      <li key={i}><strong>{item.ds}:</strong> ${item.yhat.toFixed(2)}</li>
                     ))}
                   </ul>
                   <p className="text-success">{summary}</p>
@@ -265,23 +240,17 @@ const SalesForecast = () => {
                   <table className="table table-bordered table-sm model-comparison-table" style={{ backgroundColor: "#fff", color: "#000" }}>
                     <thead>
                       <tr>
-                        <th style={{ color: "#000" }}>Year</th>
-                        {allResults.map(r => (
-                          <th key={r.model} style={{ color: "#000" }}>{r.model.toUpperCase()}</th>
-                        ))}
+                        <th>Year</th>
+                        {allResults.map(r => <th key={r.model}>{r.model.toUpperCase()}</th>)}
                       </tr>
                     </thead>
                     <tbody>
                       {comparisonYears.map((year, i) => (
                         <tr key={i}>
-                          <td style={{ color: "#000" }}>{year}</td>
+                          <td>{year}</td>
                           {allResults.map(r => {
                             const found = r.forecast.find(f => f.ds === year);
-                            return (
-                              <td key={r.model} style={{ color: "#000" }} data-label={r.model.toUpperCase()}>
-                                {found ? `$${found.yhat.toFixed(2)}` : "-"}
-                              </td>
-                            );
+                            return <td key={r.model}>{found ? `$${found.yhat.toFixed(2)}` : "-"}</td>;
                           })}
                         </tr>
                       ))}
@@ -290,23 +259,23 @@ const SalesForecast = () => {
 
                   {allResults.length > 0 && (
                     <div className="mt-3">
-                      <h6 style={{ color: "#fff" }}>Model Metrics (MAE / MSE / RMSE)</h6>
-                      <table className="table table-bordered table-sm" style={{ color: "#fff" }}>
+                      <h6>Model Metrics (MAE / MSE / RMSE)</h6>
+                      <table className="table table-bordered table-sm">
                         <thead>
                           <tr>
-                            <th style={{ color: "#fff" }}>Model</th>
-                            <th style={{ color: "#fff" }}>MAE</th>
-                            <th style={{ color: "#fff" }}>MSE</th>
-                            <th style={{ color: "#fff" }}>RMSE</th>
+                            <th>Model</th>
+                            <th>MAE</th>
+                            <th>MSE</th>
+                            <th>RMSE</th>
                           </tr>
                         </thead>
                         <tbody>
                           {allResults.map(r => (
                             <tr key={r.model}>
-                              <td style={{ color: "#fff" }}>{r.model.toUpperCase()}</td>
-                              <td style={{ color: "#fff" }}>{r.metrics?.MAE ?? "-"}</td>
-                              <td style={{ color: "#fff" }}>{r.metrics?.MSE ?? "-"}</td>
-                              <td style={{ color: "#fff" }}>{r.metrics?.RMSE ?? "-"}</td>
+                              <td>{r.model.toUpperCase()}</td>
+                              <td>{r.metrics?.MAE ?? "-"}</td>
+                              <td>{r.metrics?.MSE ?? "-"}</td>
+                              <td>{r.metrics?.RMSE ?? "-"}</td>
                             </tr>
                           ))}
                         </tbody>

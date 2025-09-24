@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import "./RecommendationSystem.css"; // Keep your existing CSS
+const BASE_URL = process.env.REACT_APP_BACKEND_URL || "https://smartbiziq-backend-clean-1.onrender.com";
 
 const RecommendationSystem = () => {
   const [file, setFile] = useState(null);
@@ -36,21 +37,22 @@ const RecommendationSystem = () => {
     formData.append("expected_value", expectedValue); // NEW
 
     try {
-      const response = await axios.post(
-        "http://127.0.0.1:8000/upload_and_recommend",
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
+  const response = await axios.post(
+    `${BASE_URL}/upload_and_recommend`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
 
-      setRecommendations(response.data.recommendations || []);
-      setCluster(response.data.cluster);
-    } catch (err) {
-      const detail =
-        err.response?.data?.detail || "🚨 Could not process recommendations.";
-      setErrorMsg(detail);
-    } finally {
-      setLoading(false);
-    }
+  setRecommendations(response.data.recommendations || []);
+  setCluster(response.data.cluster);
+} catch (err) {
+  const detail =
+    err.response?.data?.detail || "🚨 Could not process recommendations.";
+  setErrorMsg(detail);
+} finally {
+  setLoading(false);
+}
+
   };
 
   const styles = {
